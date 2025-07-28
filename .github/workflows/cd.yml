@@ -3,7 +3,6 @@ on:
   push:
     branches:
       - main
-      - new-branch
   workflow_dispatch:  # Allow manual triggering from GitHub UI
 
 jobs:
