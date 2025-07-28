@@ -3,9 +3,9 @@ name: Python Flask CI # <--- IMPORTANT: This exact name is used in the CD workfl
 
 on:
   push:
-    branches: [ dev ] # Triggerr on pushes to the 'dev' branch
+    branches: [ master ] # Triggerr on pushes to the 'dev' branch
   pull_request:
-    branches: [ dev ] # Also trigger on pull requests to 'dev'
+    branches: [ master ] # Also trigger on pull requests to 'dev'
 
 # Permissions required for the GITHUB_TOKEN to perform actions like:
 # - Reading repository contents (checkout)
