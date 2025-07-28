@@ -1,0 +1,81 @@
+# .github/workflows/deploy-to-cloud-run.yml
+name: Deploy to Cloud Run
+
+on:
+  workflow_run:
+    workflows: ["Python Flask CI"] # MUST EXACTLY MATCH THE NAME OF YOUR CI WORKFLOW
+    types:
+      - completed
+    branches:
+      - master # Ensure this matches the branch your CI runs on
+
+env:
+  PROJECT_ID: 'thermal-hour-467308-u4'
+  GAR_NAME: 'gh-demo'
+  REGION: 'us-central1'
+  SERVICE: 'gitactionnew'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: 'Authenticate to Google Cloud with SA Key'
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: '${{ secrets.ABC }}'
+
+      - name: 'Set up gcloud CLI'
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: 'Get Image Name from CI Workflow Output'
+        id: get_image_name
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const run_id = ${{ github.event.workflow_run.id }};
+
+            const jobs_response = await github.rest.actions.listJobsForWorkflowRun({
+              owner,
+              repo,
+              run_id: run_id
+            });
+
+            const build_test_job = jobs_response.data.jobs.find(job => job.name === 'build-and-test');
+            if (!build_test_job) {
+              core.setFailed('Could not find "build-and-test" job in the triggering workflow run.');
+              return;
+            }
+
+            const steps_response = await github.rest.actions.listWorkflowRunAttemptSteps({
+                owner,
+                repo,
+                run_id: run_id,
+                attempt_number: build_test_job.run_attempt
+            });
+
+            const build_push_step = steps_response.data.steps.find(step => step.name === 'Build and Push Docker Image to Google Artifact Registry');
+            if (build_push_step && build_push_step.outputs && build_push_step.outputs.image_name) {
+              const image_name = build_push_step.outputs.image_name;
+              console.log(`Found image_name from CI: ${image_name}`);
+              core.setOutput('image_name', image_name);
+            } else {
+              core.setFailed('Could not find image_name output from the CI build step.');
+            }
+
+      - name: 'Deploy to Cloud Run'
+        id: deploy
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ env.SERVICE }}
+          region: ${{ env.REGION }}
+          image: ${{ steps.get_image_name.outputs.image_name }}
+          # flags: --allow-unauthenticated # Uncomment this if you want to make it public during deployment
+
+      - name: Show Deployed URL
+        run: echo  ${{ steps.deploy.outputs.url }}
