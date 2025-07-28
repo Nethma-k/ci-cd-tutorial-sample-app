@@ -1,18 +1,38 @@
-name: Python Flask CI
+# .github/workflows/python-flask-ci.yml
+name: Python Flask CI # <--- IMPORTANT: This exact name is used in the CD workflow trigger
 
 on:
   push:
-    branches: [ master ]
+    branches: [ dev ] # Triggerr on pushes to the 'dev' branch
   pull_request:
-    branches: [ master ]
+    branches: [ dev ] # Also trigger on pull requests to 'dev'
+
+# Permissions required for the GITHUB_TOKEN to perform actions like:
+# - Reading repository contents (checkout)
+# - Writing package information (docker push to GAR, as it's a GitHub-managed registry path)
+# - Getting an OIDC token for Google Cloud authentication
+# - Allowing the workflow_run trigger to read outputs from this workflow
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+  actions: write # Crucial for the workflow_run trigger to work and read outputs
+
+env:
+  PROJECT_ID: 'thermal-hour-467308-u4'
+  GAR_NAME: 'gh-demo' # Your Google Artifact Registry repository name
+  REGION: 'us-central1'
+  SERVICE: 'gitactionnew' # Your Cloud Run service name (used for image naming)
 
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    outputs: # Define outputs for this job that downstream workflows can access
+      image_name: ${{ steps.build_push_image.outputs.image_name }} # Expose the image name from the step below
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -23,7 +43,35 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          python -m pip install pytest # Ensure pytest is installed for tests
 
       - name: Run tests
         run: |
-          pytest
+          python -m pytest # Corrected command to run pytest
+
+      - name: 'Authenticate to Google Cloud with SA Key'
+        # Authenticates your GitHub Actions runner to Google Cloud using your service account key.
+        # This is required for pushing to Google Artifact Registry.
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: '${{ secrets.ABC }}' # Your GCP Service Account Key secret
+
+      - name: 'Set up gcloud CLI'
+        # Installs and configures the Google Cloud CLI, needed for Docker authentication with GAR.
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: 'Docker Auth to Google Artifact Registry'
+        # Authenticates Docker to your Google Artifact Registry instance.
+        run: gcloud auth configure-docker "${{ env.REGION }}-docker.pkg.dev"
+
+      - name: 'Build and Push Docker Image to Google Artifact Registry'
+        id: build_push_image # Assign an ID to this step to reference its outputs
+        run: |
+          # Construct the full image name using environment variables and the commit SHA
+          IMAGE="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_NAME }}/${{ env.SERVICE }}:${{ github.sha }}"
+          echo "Building Docker image: $IMAGE"
+          docker build -t "$IMAGE" .
+          echo "Pushing Docker image: $IMAGE"
+          docker push "$IMAGE"
+          # Set the 'image_name' output for this step, which is then exposed by the job
+          echo "image_name=$IMAGE" >> "$GITHUB_OUTPUT"
