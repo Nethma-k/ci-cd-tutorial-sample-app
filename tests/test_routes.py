@@ -3,7 +3,7 @@ import sys
 import unittest
 import json
 
-# Add parent directory to path for importt
+# Add parent directory to path for importtt
 # This is crucial for Python to find the 'app' package when running tests from 'tests/'
 sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), os.pardir))
 
