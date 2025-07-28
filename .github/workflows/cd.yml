@@ -20,15 +20,19 @@ jobs:
           key: ${{ secrets.VM_SSH_KEY }}
           port: 22
           script: |
-            docker pull ghcr.io/${{ github.repository }}:latest
+            IMAGE_ID="ghcr.io/${{ github.repository }}"
+            IMAGE_ID_LOWER=$(echo "$IMAGE_ID" | tr '[:upper:]' '[:lower:]')
 
-            # Stop any existing container (optional)
+            echo "Pulling image: $IMAGE_ID_LOWER:latest"
+            docker pull "$IMAGE_ID_LOWER:latest"
+
+            echo "Stopping and removing existing container if any"
             docker stop myapp || true
             docker rm myapp || true
 
-            # Run container with restart policy
+            echo "Running container"
             docker run -d \
               --name myapp \
               -p 80:8080 \
               --restart unless-stopped \
-              ghcr.io/${{ github.repository }}:latest
+              "$IMAGE_ID_LOWER:latest"
